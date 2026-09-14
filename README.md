@@ -13,7 +13,6 @@ download a pre-generated one from this repository.
 - Generate a database from a local kernel git tree (`db gen`).
 - Add/remove individual kernel entries in the database (`db add` / `db
   remove`).
-- Package the script + database for distribution (`upload`).
 - Self-update the script and database from GitHub (`update`).
 
 ## Usage
@@ -25,8 +24,8 @@ download a pre-generated one from this repository.
 # Generate a database for a specific kernel
 ./hw-probe.py db gen 6.5.0-rc1-custom
 
-# Create a distributable package
-./hw-probe.py upload
+# Add a kernel to the database (automatically syncs hw-support.db and .md5 to ./)
+./hw-probe.py db add 6.5.0-rc1-custom
 
 # Force an update of the script and database from GitHub
 ./hw-probe.py update
@@ -34,7 +33,10 @@ download a pre-generated one from this repository.
 
 By default the database is stored at `~/.local/share/hw-probe/hw-support.db`
 and the kernel source tree is expected at `~/workspace/linux`; both can be
-overridden with `--db-file` and `--kernel-source`.
+overridden with `--db-file` and `--kernel-source`. When running `db gen`,
+`db add`, or `db remove`, the updated database and its `.md5` file are
+automatically copied to the current directory (`./`) for convenient git
+commits (can be disabled with `--no-sync-cwd`).
 
 ## Updating
 

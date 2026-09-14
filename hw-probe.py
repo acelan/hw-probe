@@ -14,9 +14,6 @@ Example Usage:
   # Generate a database for a specific kernel
   ./hw-probe.py db gen 6.5.0-rc1-custom
 
-  # Create a distributable package
-  ./hw-probe.py upload
-
   # Force an update of the script and database
   ./hw-probe.py update
 """
@@ -261,6 +258,11 @@ class DatabaseManager:
                         info_parts.append(f"{k_id}:{m_id}")
                 if info_parts:
                     f.write(f"{hw_id} = {','.join(info_parts)}\n")
+
+        # Generate MD5 checksum file alongside database
+        db_md5 = calculate_md5(self.db_path)
+        with open(self.db_path + ".md5", "w") as f:
+            f.write(db_md5)
 
     def get_support_info(self, hw_id: str) -> Optional[Dict[str, str]]:
         if hw_id in self.db:
@@ -871,38 +873,6 @@ def handle_query(args):
         print(f"\nNo support information found in the database for '{args.id}'.")
 
 
-def handle_upload(args):
-    """Handles the 'upload' command to create a distributable package."""
-    upload_dir = "hw-probe"
-    db_source_path = os.path.expanduser(args.db_file)
-    script_source_path = os.path.realpath(__file__)
-
-    if not os.path.exists(db_source_path):
-        print(f"Error: Database file not found at {db_source_path}", file=sys.stderr)
-        print("Please generate it first with 'db gen'.", file=sys.stderr)
-        sys.exit(1)
-
-    os.makedirs(upload_dir, exist_ok=True)
-    print(f"Created directory: ./{upload_dir}")
-
-    # Copy and generate MD5 for the database
-    db_dest_path = os.path.join(upload_dir, os.path.basename(db_source_path))
-    shutil.copy2(db_source_path, db_dest_path)
-    db_md5 = calculate_md5(db_dest_path)
-    with open(db_dest_path + ".md5", "w") as f:
-        f.write(db_md5)
-    print(f"Copied database to ./{db_dest_path} (md5: {db_md5[:7]}...)")
-
-    # Copy and generate MD5 for the script
-    script_dest_path = os.path.join(upload_dir, os.path.basename(script_source_path))
-    shutil.copy2(script_source_path, script_dest_path)
-    script_md5 = calculate_md5(script_dest_path)
-    with open(script_dest_path + ".md5", "w") as f:
-        f.write(script_md5)
-    print(f"Copied script to ./{script_dest_path} (md5: {script_md5[:7]}...)")
-    print("\nUpload package created successfully.")
-
-
 def handle_update(args):
     """Handles the 'update' command to download new files and self-update."""
     base_url = UPDATE_BASE_URL.rstrip('/')
@@ -932,6 +902,8 @@ def main():
 
     # DB management command
     parser_db = subparsers.add_parser("db", help="Manage the local hardware database.")
+    parser_db.add_argument("--no-sync-cwd", dest="sync_cwd", action="store_false", default=True,
+                            help="Do not copy updated hw-support.db and .md5 to current directory (default: copies to ./)")
     db_subparsers = parser_db.add_subparsers(dest="db_command", required=True)
     parser_db_gen = db_subparsers.add_parser("gen", help="Generate a new database from a kernel version.")
     parser_db_gen.add_argument("kernel_version", help="The kernel version to build from (e.g., '6.5.0-rc1').")
@@ -942,10 +914,6 @@ def main():
     parser_db_remove = db_subparsers.add_parser("remove", help="Remove a kernel from the database.")
     parser_db_remove.add_argument("kernel_version", help="The kernel version to remove.")
 
-    # Upload command
-    parser_upload = subparsers.add_parser("upload", help="Create a distributable package in ./hw-probe/")
-    parser_upload.set_defaults(func=handle_upload)
-
     # Update command
     parser_update = subparsers.add_parser("update", help="Update script and database from the hard-coded URL.")
     parser_update.set_defaults(func=handle_update)
@@ -954,8 +922,6 @@ def main():
 
     if args.command == "query":
         args.func(args)
-    elif args.command == "upload":
-        handle_upload(args)
     elif args.command == "update":
         handle_update(args)
     elif args.command == "db":
@@ -969,6 +935,19 @@ def main():
             db_manager.add_kernel(args.kernel_version, args.kernel_source, kernel_name)
         elif args.db_command == "remove":
             db_manager.remove_kernel(args.kernel_version)
+
+        if getattr(args, "sync_cwd", False):
+            cwd_db = os.path.abspath(os.path.basename(db_manager.db_path))
+            if os.path.abspath(db_manager.db_path) != cwd_db:
+                shutil.copy2(db_manager.db_path, cwd_db)
+                db_md5_src = db_manager.db_path + ".md5"
+                cwd_db_md5 = cwd_db + ".md5"
+                if os.path.exists(db_md5_src):
+                    shutil.copy2(db_md5_src, cwd_db_md5)
+                else:
+                    with open(cwd_db_md5, "w") as f:
+                        f.write(calculate_md5(cwd_db))
+                print(f"Copied {os.path.basename(cwd_db)} and .md5 to ./")
 
 if __name__ == "__main__":
     main()
